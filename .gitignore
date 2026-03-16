@@ -1,0 +1,14 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.env/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Project-specific (any test images or outputs)
+output_*.png
