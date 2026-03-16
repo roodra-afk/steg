@@ -115,8 +115,8 @@ If density becomes too high (>10%), the tool warns that **steganalysis may detec
 ## 1. Clone the repository
 
 ```
-git clone https://github.com/yourusername/image-steganography-tool.git
-cd image-steganography-tool
+git clone https://github.com/roodra-afk/steg
+cd steg
 ```
 
 ## 2. Install dependencies
@@ -145,7 +145,7 @@ cryptography
 Run the script using Python:
 
 ```
-python stego.py
+python steg.py
 ```
 
 You will be prompted to choose a mode.
