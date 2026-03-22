@@ -1,10 +1,10 @@
 # steg
 
-# Custom Image Steganography Tool
+# Advanced Image Steganography Tool
 
 A secure command-line steganography tool written in Python that allows users to **hide encrypted messages inside images** using **Least Significant Bit (LSB) steganography** combined with **AES-256 encryption**.
 
-This project demonstrates how **cryptography and steganography** can be combined to securely conceal information inside digital images while maintaining minimal visual distortion.
+Designed with a focus on **stealth, integrity, and cryptographic security**, this project demonstrates how modern cryptography and steganography can be combined to conceal information inside digital images with minimal visual distortion.
 
 ---
 
@@ -17,104 +17,116 @@ This tool allows you to:
 * Extract hidden messages using the correct password
 * Analyze image capacity and embedding density
 
-Unlike simple steganography tools, this implementation **encrypts the data before hiding it**, providing an additional security layer.
+Unlike simple steganography tools, this implementation **encrypts the data before hiding it**, adding a strong security layer.
 
-Even if someone detects hidden data, they **cannot read the message without the password**.
+Even if hidden data is detected, it **cannot be decrypted without the correct password**.
 
 ---
 
 # How It Works
 
-The system works in **two main stages**:
+The system operates in **two main stages**:
+
+---
 
 ## 1. Encryption
 
-Before embedding the message, the script encrypts it using:
+Before embedding, the message is encrypted using:
 
-* **AES-256 GCM encryption**
-* **PBKDF2 password-based key derivation**
+* **AES-256 GCM (authenticated encryption)**
+* **PBKDF2 key derivation (600,000 iterations)**
 * Random **salt** and **nonce**
 
-Process:
-
-1. User enters a secret message and password
+### Process:
+1. User provides message and password
 2. A cryptographic key is derived from the password
-3. The message is encrypted
-4. The encrypted blob is prepared for embedding
+3. Message is encrypted securely
+4. Encrypted data is prepared for embedding
 
 ---
 
 ## 2. Steganography (Randomized LSB Encoding)
 
-The encrypted data is hidden using a **Password-Seeded PRNG (Pseudo-Random Number Generator)**.
+The encrypted data is embedded using a **password-seeded pseudo-random process**:
 
-Instead of hiding data in a predictable line from top-to-bottom, the script:
-1.  **Hashes your password** to create a unique mathematical seed.
-2.  **Shuffles the pixel coordinates** of the entire image based on that seed.
-3.  **Scatters the message bits** across the image in a random-looking pattern.
+1. The password is hashed to generate a deterministic seed
+2. Pixel coordinates are shuffled based on that seed
+3. Data bits are scattered across the image in a non-linear pattern
 
-This makes the hidden data look like natural "sensor noise" to forensic tools, making it much harder to detect with visual or statistical attacks.
+This ensures the embedded data resembles natural noise and avoids detectable patterns.
 
 ---
 
 ### Why Randomized LSB?
-Sequential LSB (hiding bits in a row) creates a "signature" in the image's bit-planes. An attacker using a tool like **StegSolve** can easily see a horizontal bar of noise at the top of the image.
 
-By using a **Password-Seeded PRNG Shuffle**, this tool:
-* Destroys the spatial correlation of the hidden data.
-* Spreads the "entropy" across the entire image.
-* Ensures that even a Chi-square statistical attack cannot easily distinguish the hidden bits from natural camera sensor noise.
+Sequential LSB encoding creates visible statistical patterns that can be detected using tools like **StegSolve**.
 
----
+This implementation:
 
-## 3. Mathematical Integrity
-The pixel path is generated using:
-$Path = Shuffle(Coordinates, Seed(Hash(Password)))$  
-Without the 256-bit hash of the password, the coordinate map is mathematically impossible to reconstruct, adding a layer of **Security through Obscurity** on top of our **AES-GCM encryption**.
+* Breaks spatial patterns in embedded data
+* Distributes entropy across the entire image
+* Reduces effectiveness of statistical attacks (e.g., Chi-square analysis)
 
 ---
 
-### Visual Integrity
+## 3. Coordinate Generation
+
+The embedding path is determined by:
+```
+Path = Shuffle(Coordinates, Seed(Hash(Password)))
+```
+
+Without the correct password, reconstructing the embedding path is computationally infeasible.
+
+This adds an additional **obfuscation layer** on top of AES-GCM encryption.
+
+---
+
+## Visual Integrity
+
 | Original Image | Stego Image (Encoded) |
 | :---: | :---: |
 | ![Original](./examples/cover.png) | ![Encoded](./examples/stego.png) |
-| 0% Change | 0.0164% LSB Change |
-*Note: Even at high magnification, the LSB modification remains invisible to the human eye.*
+| 0% Change | ~0.01% LSB Change |
+
+*Even under magnification, modifications remain imperceptible to the human eye.*
 
 ---
 
-## Message Structure Inside Image
+# Message Structure Inside Image
 
-The embedded data contains:
-
+The embedded payload structure:
 ```
-[32-bit header][salt][nonce][encrypted message]
+[32-bit mask][32-bit masked_length][salt][nonce][encrypted payload]
 ```
 
-The **32-bit header** stores the length of the encrypted payload so the decoder knows how many bits to extract.
+
+The payload length is XOR-masked to prevent straightforward extraction or pattern detection.
 
 ---
 
 # Image Capacity & Density Analysis
 
-Before encoding, the tool analyzes the image:
+Before encoding, the tool evaluates:
 
 * Image dimensions
 * Total available LSB slots
-* Required bits for the message
-* Steganographic density percentage
+* Required bits for payload
+* Embedding density percentage
 
-Example output:
+### Example Output:
 
 ```
 [*] Image Analysis:
-- Dimensions:      1920x1080
-- Total LSB Slots: 6220800
-- Required Bits:   1024
-- Stego Density:   0.0164%
+
+Dimensions: 1920x1080
+Total LSB Slots: 6220800
+Required Bits: 1024
+Stego Density: 0.0164%
 ```
 
-If density becomes too high (>10%), the tool warns that **steganalysis may detect the hidden data**.
+
+If density exceeds safe thresholds, the tool warns about potential detectability.
 
 ---
 
@@ -124,153 +136,96 @@ If density becomes too high (>10%), the tool warns that **steganalysis may detec
 | -------------------- | ------------------------------------ |
 | Python 3             | Core programming language            |
 | Pillow (PIL)         | Image processing                     |
-| cryptography library | AES encryption and key derivation    |
+| cryptography library | Encryption and key derivation        |
 | AES-256-GCM          | Authenticated encryption             |
-| PBKDF2HMAC           | Secure password-based key derivation |
-| LSB Steganography    | Hiding data inside image pixels      |
-
----
-
-## ⚠️ Disclaimer
-This tool is for **educational and research purposes only**. The author is not responsible for any misuse of this software. Always ensure you have explicit permission before performing any security testing or data hiding on systems you do not own.
+| PBKDF2HMAC           | Password-based key derivation        |
+| Reed-Solomon         | Error correction and integrity check |
+| LSB Steganography    | Data embedding in image pixels       |
 
 ---
 
 # Installation
 
 ## 1. Clone the repository
-
 ```
 git clone https://github.com/roodra-afk/steg
+
 cd steg
 ```
 
+
+---
+
 ## 2. Install dependencies
-
-```
-pip install pillow cryptography
-```
-
-Or using requirements:
-
 ```
 pip install -r requirements.txt
-```
-
-Example `requirements.txt`:
-
-```
-pillow
-cryptography
 ```
 
 ---
 
 # Usage
 
-Run the script using Python:
-
-```
-python steg.py
-```
-
-You will be prompted to choose a mode.
+Run the tool via command-line arguments:
 
 ---
 
-### Integrity Verification
-To ensure the stego-image hasn't been altered (which would destroy the hidden data), it is recommended to generate a SHA-256 hash:
-```bash
-sha256sum examples/stego.png
+## Encode a Message
+```
+python3 steg.py encode -i input.png -m "Secret message" -p "password" -o output.png
 ```
 
 ---
 
-# Encode a Secret Message
-
-Choose:
-
+## Decode a Message
 ```
-encode
-```
-
-Then enter:
-
-* Input image path
-* Secret message
-* Password
-* Output image name
-
-Example:
-
-```
-Choose mode (encode/decode): encode
-Enter path to your custom image: photo.png
-Enter the secret message: This is classified
-Enter a password: myStrongPassword
-Enter name for the output image: hidden.png
-```
-
-Output:
-
-```
-Success! 'hidden.png' now contains your secret.
+python3 steg.py decode -i output.png -p "password"
 ```
 
 ---
 
-# Decode a Hidden Message
+## Example
 
-Choose:
-
+### Encode:
 ```
-decode
-```
-
-Then enter:
-
-* Encoded image
-* Password
-
-Example:
-
-```
-Choose mode (encode/decode): decode
-Enter path to the image you want to decode: hidden.png
-Enter the password: myStrongPassword
+python3 steg.py encode -i photo.png -m "This is classified" -p "myStrongPassword" -o hidden.png
 ```
 
-Output:
-
+### Decode:
 ```
-[+] DECODED MESSAGE: This is classified
-```
-
-If the password is incorrect or the image is corrupted:
-
-```
-[-] Error: Decryption failed. Wrong password or damaged image.
+python3 steg.py decode -i hidden.png -p "myStrongPassword"
 ```
 
 ---
 
 # Security Features
 
-* PRNG-Based Bit Shuffling: Uses a password-seeded shuffle to scatter data, bypassing first-order statistical steganalysis.
 * AES-256-GCM authenticated encryption
-* PBKDF2 key derivation with 100,000 iterations
-* Random cryptographic salt
-* Random nonce generation
-* Message length header validation
-* Density warning to reduce detectability
+* PBKDF2 key derivation with 600,000 iterations
+* Reed-Solomon error correction
+* Password-seeded pixel shuffling
+* Channel-level randomization
+* Obfuscated payload length header
+* Density-based detectability warning
 
 ---
 
 # Limitations
 
-* Works best with **PNG images**
-* Image compression (like JPEG recompression) may destroy hidden data
-* Extremely large messages may increase detection risk
+* Optimized for **PNG images**
+* Lossy formats (e.g., JPEG recompression) may destroy hidden data
+* Very large payloads increase detection risk
+* Requires correct password for both decoding and pixel mapping
+
+---
+
+# Integrity Verification (Optional)
+
+To verify that the stego image has not been altered:
+```
+sha256sum output.png
+```
+
+Any modification will likely corrupt the hidden payload.
 
 ---
 
@@ -278,9 +233,15 @@ If the password is incorrect or the image is corrupted:
 
 Future enhancements could include:
 
-* Support for multiple image formats
-* GUI interface
-* File embedding instead of text only
-* Advanced steganalysis resistance
+* GUI or web interface
+* Support for multiple file formats
+* File embedding (not just text)
+* Adaptive or edge-based embedding
+* Advanced steganalysis resistance techniques
 
 ---
+
+## ⚠️ Disclaimer
+
+This tool is intended for **educational and research purposes only**.  
+The author is not responsible for misuse. Always ensure proper authorization when working with data concealment techniques.
