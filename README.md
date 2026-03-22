@@ -178,6 +178,14 @@ You will be prompted to choose a mode.
 
 ---
 
+### Integrity Verification
+To ensure the stego-image hasn't been altered (which would destroy the hidden data), it is recommended to generate a SHA-256 hash:
+```bash
+sha256sum examples/stego.png
+```
+
+---
+
 # Encode a Secret Message
 
 Choose:
