@@ -169,14 +169,14 @@ Run the tool via command-line arguments:
 
 ---
 
-## Encode a Message
+### Encode a Message
 ```
 python3 steg.py encode -i input.png -m "Secret message" -p "password" -o output.png
 ```
 
 ---
 
-## Decode a Message
+### Decode a Message
 ```
 python3 steg.py decode -i output.png -p "password"
 ```
