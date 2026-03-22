@@ -65,7 +65,7 @@ Because the change is extremely small, **the image looks visually identical to t
 ### Visual Integrity
 | Original Image | Stego Image (Encoded) |
 | :---: | :---: |
-| ![Original](https://via.placeholder.com/150) | ![Encoded](https://via.placeholder.com/150) |
+| ![Original](./examples/cover.png) | ![Encoded](./examples/stego.png) |
 | 0% Change | 0.0164% LSB Change |
 *Note: Even at high magnification, the LSB modification remains invisible to the human eye.*
 
