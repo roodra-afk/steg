@@ -12,3 +12,7 @@ Thumbs.db
 
 # Project-specific (any test images or outputs)
 output_*.png
+__pychache__
+__pychache__/
+*.pyc
+.venv/

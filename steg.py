@@ -1,4 +1,7 @@
+import numpy as np
+import random
 import sys
+from PIL import ImageOps
 import os
 from PIL import Image
 from cryptography.hazmat.primitives import hashes
@@ -20,9 +23,26 @@ def decrypt_data(combined: bytes, password: str):
     key = derive_key(password, salt)
     return AESGCM(key).decrypt(nonce, ciphertext, None)
 
+def get_shuffled_coords(width, height, password):
+    # Create a list of all possible (x, y) coordinates
+    coords = [(x, y) for y in range(height) for x in range(width)]
+    
+    # Use a hash of the password as the seed for the PRNG
+    seed_hash = hashes.Hash(hashes.SHA256())
+    seed_hash.update(password.encode())
+    seed = int.from_bytes(seed_hash.finalize(), 'big')
+    
+    random.seed(seed)
+    random.shuffle(coords)
+    return coords
+
 # --- STEGANOGRAPHY CORE ---
 def encode(input_img_path, message, password, output_img_path):
     img = Image.open(input_img_path).convert('RGB')
+    img = ImageOps.exif_transpose(img) # Fixes orientation
+    data = np.array(img).flatten().tolist()
+    img = Image.new(img.mode, img.size) # This creates a "clean" copy without metadata
+    img.putdata(data)
     pixels = img.load()
     width, height = img.size
     
@@ -40,6 +60,8 @@ def encode(input_img_path, message, password, output_img_path):
     print(f"    - Total LSB Slots: {total_slots}")
     print(f"    - Required Bits:   {required_bits}")
     print(f"    - Stego Density:   {density:.4f}%") # Shows 4 decimal places
+    print(f"[*] OpSec: EXIF Metadata stripped successfully.")
+
     
     if required_bits > total_slots:
         max_chars = (total_slots - 384) // 8
@@ -65,59 +87,63 @@ def encode(input_img_path, message, password, output_img_path):
         print(f"Error: Message too long! Max capacity is {((width*height*3)-416)//8} bytes.")
         return False
 
+    coords = get_shuffled_coords(width, height, password)
     bit_idx = 0
-    for y in range(height):
-        for x in range(width):
-            r, g, b = pixels[x, y]
-            channels = [r, g, b]
-            for i in range(3):
-                if bit_idx < len(bit_stream):
-                    channels[i] = (channels[i] & ~1) | bit_stream[bit_idx]
-                    bit_idx += 1
-            pixels[x, y] = tuple(channels)
-            if bit_idx >= len(bit_stream):
-                img.save(output_img_path, format="PNG")
-                return True
+    
+    for x, y in coords:
+        r, g, b = pixels[x, y]
+        channels = [r, g, b]
+        for i in range(3):
+            if bit_idx < len(bit_stream):
+                channels[i] = (channels[i] & ~1) | bit_stream[bit_idx]
+                bit_idx += 1
+            
+        pixels[x, y] = tuple(channels)
+        if bit_idx >= len(bit_stream):
+            img.save(output_img_path, format="PNG")
+            return True
 
 def decode(img_path, password):
     img = Image.open(img_path).convert('RGB')
     pixels = img.load()
     width, height = img.size
     
-    # 1. Extract length header (32 bits)
-    header_bits = []
-    bit_count = 0
-    for y in range(height):
-        for x in range(width):
-            r, g, b = pixels[x, y]
-            for c in [r, g, b]:
-                if bit_count < 32:
-                    header_bits.append(c & 1)
-                    bit_count += 1
-            if bit_count >= 32: break
-        if bit_count >= 32: break
-
-    blob_len = int("".join(map(str, header_bits)), 2)
+    # Get the exact same shuffled path using the password
+    coords = get_shuffled_coords(width, height, password)
     
-    # 2. Extract encrypted blob
-    all_bits = []
-    bit_limit = 32 + (blob_len * 8)
+    # 1. Extract length header (32 bits)
+    all_extracted_bits = []
+    bit_limit = 32  # Start by getting the header
     bit_idx = 0
-    for y in range(height):
-        for x in range(width):
-            r, g, b = pixels[x, y]
-            for c in [r, g, b]:
-                if bit_idx < bit_limit:
-                    all_bits.append(c & 1)
-                    bit_idx += 1
-            if bit_idx >= bit_limit: break
+    
+    for x, y in coords:
+        r, g, b = pixels[x, y]
+        for c in [r, g, b]:
+            if bit_idx < bit_limit:
+                all_extracted_bits.append(c & 1)
+                bit_idx += 1
+        if bit_idx >= bit_limit: break
+
+    blob_len = int("".join(map(str, all_extracted_bits[:32])), 2)
+    
+    # 2. Extract encrypted blob (reset and get the full stream)
+    bit_limit = 32 + (blob_len * 8)
+    all_extracted_bits = []
+    bit_idx = 0
+    
+    for x, y in coords:
+        r, g, b = pixels[x, y]
+        for c in [r, g, b]:
+            if bit_idx < bit_limit:
+                all_extracted_bits.append(c & 1)
+                bit_idx += 1
         if bit_idx >= bit_limit: break
 
     blob_bytes = bytearray()
-    for i in range(32, len(all_bits), 8):
-        blob_bytes.append(int("".join(map(str, all_bits[i:i+8])), 2))
+    for i in range(32, len(all_extracted_bits), 8):
+        blob_bytes.append(int("".join(map(str, all_extracted_bits[i:i+8])), 2))
     
-    return decrypt_data(bytes(blob_bytes), password).decode()
+    return decrypt_data(bytes(blob_bytes), password).decode() 
 
 # --- INTERACTIVE CLI ---
 if __name__ == "__main__":
@@ -126,6 +152,8 @@ if __name__ == "__main__":
 
     if mode == "encode":
         in_file = input("Enter path to your custom image (e.g., my_photo.png): ")
+        if not img_path.lower().endswith('.png'):
+            print("[!] Warning: Steganography is most reliable with PNG. JPEG may lose data.")
         if not os.path.exists(in_file):
             print("Error: File not found.")
             sys.exit()
