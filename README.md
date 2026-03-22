@@ -44,21 +44,33 @@ Process:
 
 ---
 
-## 2. Steganography (LSB Encoding)
+## 2. Steganography (Randomized LSB Encoding)
 
-The encrypted data is hidden inside the image using **Least Significant Bit modification**.
+The encrypted data is hidden using a **Password-Seeded PRNG (Pseudo-Random Number Generator)**.
 
-Each pixel in an RGB image has three color channels:
+Instead of hiding data in a predictable line from top-to-bottom, the script:
+1.  **Hashes your password** to create a unique mathematical seed.
+2.  **Shuffles the pixel coordinates** of the entire image based on that seed.
+3.  **Scatters the message bits** across the image in a random-looking pattern.
 
-* Red
-* Green
-* Blue
+This makes the hidden data look like natural "sensor noise" to forensic tools, making it much harder to detect with visual or statistical attacks.
 
-Each channel stores 8 bits.
+---
 
-The script replaces the **least significant bit of each channel** with message bits.
+### Why Randomized LSB?
+Sequential LSB (hiding bits in a row) creates a "signature" in the image's bit-planes. An attacker using a tool like **StegSolve** can easily see a horizontal bar of noise at the top of the image.
 
-Because the change is extremely small, **the image looks visually identical to the original**.
+By using a **Password-Seeded PRNG Shuffle**, this tool:
+* Destroys the spatial correlation of the hidden data.
+* Spreads the "entropy" across the entire image.
+* Ensures that even a Chi-square statistical attack cannot easily distinguish the hidden bits from natural camera sensor noise.
+
+---
+
+#### 3. Mathematical Integrity
+The pixel path is generated using:
+$Path = Shuffle(Coordinates, Seed(Hash(Password)))$
+Without the 256-bit hash of the password, the coordinate map is mathematically impossible to reconstruct, adding a layer of **Security through Obscurity** on top of our **AES-GCM encryption**.
 
 ---
 
@@ -116,6 +128,11 @@ If density becomes too high (>10%), the tool warns that **steganalysis may detec
 | AES-256-GCM          | Authenticated encryption             |
 | PBKDF2HMAC           | Secure password-based key derivation |
 | LSB Steganography    | Hiding data inside image pixels      |
+
+---
+
+## ⚠️ Disclaimer
+This tool is for **educational and research purposes only**. The author is not responsible for any misuse of this software. Always ensure you have explicit permission before performing any security testing or data hiding on systems you do not own.
 
 ---
 
@@ -231,6 +248,7 @@ If the password is incorrect or the image is corrupted:
 
 # Security Features
 
+* PRNG-Based Bit Shuffling: Uses a password-seeded shuffle to scatter data, bypassing first-order statistical steganalysis.
 * AES-256-GCM authenticated encryption
 * PBKDF2 key derivation with 100,000 iterations
 * Random cryptographic salt
@@ -252,7 +270,6 @@ If the password is incorrect or the image is corrupted:
 
 Future enhancements could include:
 
-* Randomized pixel embedding
 * Support for multiple image formats
 * GUI interface
 * File embedding instead of text only
