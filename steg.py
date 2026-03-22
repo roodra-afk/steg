@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 # --- ENCRYPTION HELPERS ---
 def derive_key(password: str, salt: bytes):
-    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=600000)
     return kdf.derive(password.encode())
 
 def encrypt_data(data: bytes, password: str):
@@ -32,8 +32,8 @@ def get_shuffled_coords(width, height, password, verbose=False):
     seed_hash.update(password.encode())
     seed = int.from_bytes(seed_hash.finalize(), 'big')
     
-    random.seed(seed)
-    random.shuffle(coords)
+    rng = random.Random(seed)
+    rng.shuffle(coords)
     
     if verbose:
         print(f"[*] Entropy: Shuffled {width*height} pixels with seed {seed % 10000}")
@@ -42,72 +42,98 @@ def get_shuffled_coords(width, height, password, verbose=False):
 
 # --- STEGANOGRAPHY CORE ---
 def encode(input_img_path, message, password, output_img_path, verbose=False):
-    # --- STEP 1: METADATA STRIPPING (OPSEC) ---
-    # We open the image and immediately copy only pixel data to a new object.
-    # This prevents EXIF/Metadata from leaking into the output file.
+    # --- STEP 0: FORMAT CHECK (PNG ONLY) ---
+    if not input_img_path.lower().endswith(".png"):
+        print("[!] Only PNG format is supported for reliable steganography.")
+        return False
+
+    # --- STEP 1: METADATA STRIPPING ---
     raw_img = Image.open(input_img_path).convert('RGB')
-    img = raw_img.copy() 
+    img = raw_img.copy()
     pixels = img.load()
     width, height = img.size
-    
-    # --- STEP 2: PREPARE DATA (ECC + ENCRYPTION) ---
-    rs = RSCodec(10) # Reed-Solomon: adds 10 parity bytes
-    ecc_data = rs.encode(message.encode())
-    
+
+    ecc_data = b"STEG" + bytes([parity]) + rs.encode(message.encode())
+
+    # --- STEP 2: ECC + ENCRYPTION ---
+    parity = random.randint(8, 16)
+    rs = RSCodec(parity)
+    ecc_data = bytes([parity]) + rs.encode(message.encode())
+
     encrypted_blob = encrypt_data(ecc_data, password)
-    header = format(len(encrypted_blob), '032b') 
-    
-    bit_stream = [int(b) for b in header]
-    for byte in encrypted_blob:
-        for bit in format(byte, '08b'):
-            bit_stream.append(int(bit))
-     
-    # --- STEP 3: VISIBLE CAPACITY & DENSITY BLOCK ---
-    total_slots = width * height * 3 
+
+    # --- STEP 2.1: OBFUSCATED HEADER (64-bit) ---
+    mask = int.from_bytes(os.urandom(4), 'big')
+    masked_len = len(encrypted_blob) ^ mask
+
+    header_bits = format(mask, '032b') + format(masked_len, '032b')
+
+    # --- BUILD BIT STREAM (FAST METHOD) ---
+    bit_stream = [int(b) for b in header_bits]
+    bit_stream.extend(
+        [(byte >> i) & 1 for byte in encrypted_blob for i in range(7, -1, -1)]
+    )
+
+    # --- STEP 3: CAPACITY CHECK ---
+    total_slots = width * height * 3
     required_bits = len(bit_stream)
     density = (required_bits / total_slots) * 100
-    
+
     print(f"\n[*] Image Analysis:")
     print(f"    - Dimensions:      {width}x{height}")
     print(f"    - Total LSB Slots: {total_slots}")
     print(f"    - Required Bits:   {required_bits}")
     print(f"    - Stego Density:   {density:.4f}%")
     print(f"[*] OpSec: EXIF Metadata stripped successfully.")
-    
+
+    if density > 10:
+        print("[!] ERROR: Density too high for safe steganography.")
+        return False
+    elif density > 5:
+        print("[!] Warning: High embedding density may be detectable!")
+
     if required_bits > total_slots:
         print(f"[!] ERROR: Image too small! Required: {required_bits}, Available: {total_slots}")
         return False
 
-    # --- STEP 4: EMBEDDING (SHUFFLED PIXELS + SHUFFLED CHANNELS) ---
+    # --- STEP 4: EMBEDDING ---
     coords, seed = get_shuffled_coords(width, height, password, verbose)
     bit_idx = 0
-    
+
     if verbose:
         print(f"[*] Embedding {len(bit_stream)} bits into pixels...")
 
     for x, y in coords:
         r, g, b = pixels[x, y]
         channels = [r, g, b]
-        
-        # CHANNEL SHUFFLE: Randomize RGB order for this specific pixel
+
+        # Deterministic channel shuffle (LOCAL RNG)
         channel_order = [0, 1, 2]
-        random.seed(seed + x + y) 
-        random.shuffle(channel_order)
-        
+        rng = random.Random(seed + x + y)
+        rng.shuffle(channel_order)
+
         for i in channel_order:
             if bit_idx < len(bit_stream):
-                # Apply LSB change
-                channels[i] = (channels[i] & ~1) | bit_stream[bit_idx]
+                bit = bit_stream[bit_idx]
+
+                # --- LSB MATCHING (STEALTH BOOST) ---
+                if (channels[i] & 1) != bit:
+                    if channels[i] == 255:
+                        channels[i] -= 1
+                    else:
+                        channels[i] += 1
+
                 bit_idx += 1
-                
+
         pixels[x, y] = tuple(channels)
-        
-        # Save and exit once all bits are hidden
+
         if bit_idx >= len(bit_stream):
-            img.save(output_img_path, format="PNG", compress_level=0)
+            img.save(output_img_path, format="PNG", compress_level=6)
             if verbose:
                 print(f"[+] Embedding complete. Output saved to {output_img_path}")
             return True
+
+    return False
             
 def decode(img_path, password, verbose=False):
     img = Image.open(img_path).convert('RGB')
@@ -117,58 +143,70 @@ def decode(img_path, password, verbose=False):
     # Get the coordinates and the seed for channel shuffling
     coords, seed = get_shuffled_coords(width, height, password, verbose)
     
-    # --- PHASE 1: Extract 32-bit Header ---
+    # --- PHASE 1: Extract 64-bit Obfuscated Header ---
     all_extracted_bits = []
-    bit_limit = 32 
+    bit_limit = 64
     bit_idx = 0
     
-    if verbose: print("[*] Scanning image for encrypted headers...")
+    if verbose:
+        print("[*] Scanning image for encrypted headers...")
 
     for x, y in coords:
         r, g, b = pixels[x, y]
         channels = [r, g, b]
         
-        # Match the channel shuffle from the encoder
+        # Deterministic channel shuffle (LOCAL RNG)
         channel_order = [0, 1, 2]
-        random.seed(seed + x + y)
-        random.shuffle(channel_order)
+        rng = random.Random(seed + x + y)
+        rng.shuffle(channel_order)
 
         for i in channel_order:
             if bit_idx < bit_limit:
                 all_extracted_bits.append(channels[i] & 1)
                 bit_idx += 1
-        if bit_idx >= bit_limit: break
+        if bit_idx >= bit_limit:
+            break
 
-    blob_len = int("".join(map(str, all_extracted_bits[:32])), 2)
-    
+    # --- Decode masked header ---
+    mask = int("".join(map(str, all_extracted_bits[:32])), 2)
+    masked_len = int("".join(map(str, all_extracted_bits[32:64])), 2)
+    blob_len = mask ^ masked_len
+
+    if verbose:
+        print(f"[*] Found Payload: {blob_len} bytes. Commencing extraction...")
+
     # --- PHASE 2: Extract Encrypted ECC Blob ---
-    if verbose: print(f"[*] Found Payload: {blob_len} bytes. Commencing extraction...")
-
-    bit_limit = 32 + (blob_len * 8)
-    all_extracted_bits = []
-    bit_idx = 0
+    bit_limit = 64 + (blob_len * 8)
+    # keep existing bits, DO NOT reset
     
     for x, y in coords:
         r, g, b = pixels[x, y]
         channels = [r, g, b]
         
+        # Same deterministic shuffle
         channel_order = [0, 1, 2]
-        random.seed(seed + x + y)
-        random.shuffle(channel_order)
+        pixel_hash = hashes.Hash(hashes.SHA256())
+        pixel_hash.update(f"{seed}-{x}-{y}".encode())
+        pixel_seed = int.from_bytes(pixel_hash.finalize(), 'big')
+        
+        rng = random.Random(pixel_seed)
+        rng.shuffle(channel_order)
 
         for i in channel_order:
             if bit_idx < bit_limit:
                 all_extracted_bits.append(channels[i] & 1)
                 bit_idx += 1
-        if bit_idx >= bit_limit: break
+        if bit_idx >= bit_limit:
+            break
 
+    # --- Convert bits to bytes ---
     blob_bytes = bytearray()
-    for i in range(32, len(all_extracted_bits), 8):
-        blob_bytes.append(int("".join(map(str, all_extracted_bits[i:i+8])), 2))
+    for i in range(64, len(all_extracted_bits), 8):
+        byte = int("".join(map(str, all_extracted_bits[i:i+8])), 2)
+        blob_bytes.append(byte)
     
-    # Return the raw decrypted data (which still has ECC parity)
+    # --- Decrypt and return ---
     return decrypt_data(bytes(blob_bytes), password)
-    
 
 def main():
     parser = argparse.ArgumentParser(
@@ -221,18 +259,26 @@ def main():
             print(f"Success! '{args.output}' now contains your secret.")
     
     elif args.mode == "decode":
-            if not os.path.exists(args.image):
-                print(f"Error: {args.image} not found.")
-                return
+            if not decrypted_ecc_data.startswith(b"STEG"):
+                raise ValueError("Invalid password or corrupted data")
+            
+            parity = decrypted_ecc_data[4]
+            rs = RSCodec(parity)
+            
+            decoded_msg, _, errata_pos = rs.decode(decrypted_ecc_data[5:])
                     
             try:
                 # 1. Decrypt the raw blob
                 decrypted_ecc_data = decode(args.image, args.password, verbose=args.verbose)
                 
-                # 2. Reed-Solomon Decode (This also checks integrity)
-                rs = RSCodec(10)
-                # This line will throw an error if the password was wrong
-                final_message = rs.decode(decrypted_ecc_data)[0].decode()
+                parity = decrypted_ecc_data[0]
+                rs = RSCodec(parity)
+                
+                decoded_msg, _, errata_pos = rs.decode(decrypted_ecc_data[1:])
+                if errata_pos:
+                    raise ValueError("Data corruption detected")
+                
+                final_message = decoded_msg.decode()
                 
                 print(f"\n[+] DECODED MESSAGE: {final_message}")
                 
