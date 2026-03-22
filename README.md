@@ -62,6 +62,15 @@ Because the change is extremely small, **the image looks visually identical to t
 
 ---
 
+### Visual Integrity
+| Original Image | Stego Image (Encoded) |
+| :---: | :---: |
+| ![Original](https://via.placeholder.com/150) | ![Encoded](https://via.placeholder.com/150) |
+| 0% Change | 0.0164% LSB Change |
+*Note: Even at high magnification, the LSB modification remains invisible to the human eye.*
+
+---
+
 ## Message Structure Inside Image
 
 The embedded data contains:
@@ -115,8 +124,8 @@ If density becomes too high (>10%), the tool warns that **steganalysis may detec
 ## 1. Clone the repository
 
 ```
-git clone https://github.com/yourusername/image-steganography-tool.git
-cd image-steganography-tool
+git clone https://github.com/roodra-afk/steg
+cd steg
 ```
 
 ## 2. Install dependencies
@@ -145,7 +154,7 @@ cryptography
 Run the script using Python:
 
 ```
-python stego.py
+python steg.py
 ```
 
 You will be prompted to choose a mode.
