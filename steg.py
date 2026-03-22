@@ -38,11 +38,12 @@ def get_shuffled_coords(width, height, password):
 
 # --- STEGANOGRAPHY CORE ---
 def encode(input_img_path, message, password, output_img_path):
+    # --- STEP 1: METADATA STRIPPING (OPSEC) ---
     img = Image.open(input_img_path).convert('RGB')
-    img = ImageOps.exif_transpose(img) # Fixes orientation
-    data = np.array(img).flatten().tolist()
-    img = Image.new(img.mode, img.size) # This creates a "clean" copy without metadata
-    img.putdata(data)
+    # Create a new image using the same mode and size, copying ONLY the pixel data
+    clean_img = Image.new(img.mode, img.size)
+    clean_img.putdata(list(img.getdata()))
+    img = clean_img 
     pixels = img.load()
     width, height = img.size
     
@@ -152,7 +153,7 @@ if __name__ == "__main__":
 
     if mode == "encode":
         in_file = input("Enter path to your custom image (e.g., my_photo.png): ")
-        if not img_path.lower().endswith('.png'):
+        if not in_file.lower().endswith('.png'):
             print("[!] Warning: Steganography is most reliable with PNG. JPEG may lose data.")
         if not os.path.exists(in_file):
             print("Error: File not found.")
