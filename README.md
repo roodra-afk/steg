@@ -69,7 +69,7 @@ By using a **Password-Seeded PRNG Shuffle**, this tool:
 
 #### 3. Mathematical Integrity
 The pixel path is generated using:
-$Path = Shuffle(Coordinates, Seed(Hash(Password)))$
+$Path = Shuffle(Coordinates, Seed(Hash(Password)))$  
 Without the 256-bit hash of the password, the coordinate map is mathematically impossible to reconstruct, adding a layer of **Security through Obscurity** on top of our **AES-GCM encryption**.
 
 ---
