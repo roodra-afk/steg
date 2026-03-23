@@ -170,14 +170,14 @@ Run the tool via command-line arguments:
 
 ### Encode a Message
 ```
-stegx encode -i input.png -m "Secret message" -p "password" -o output.png
+stegx encode -i input.png -m "Secret message" -p 1234 -o output.png
 ```
 
 ---
 
 ### Decode a Message
 ```
-stegx decode -i output.png -p "password"
+stegx decode -i output.png -p 1234
 ```
 
 ---
@@ -186,12 +186,12 @@ stegx decode -i output.png -p "password"
 
 ### Encode:
 ```
-stegx encode -i photo.png -m "This is classified" -p "myStrongPassword" -o hidden.png
+stegx encode -i photo.png -m "This is classified" -p myStrongPassword -o hidden.png
 ```
 
 ### Decode:
 ```
-stegx decode -i hidden.png -p "myStrongPassword"
+stegx decode -i hidden.png -p myStrongPassword
 ```
 
 ---
