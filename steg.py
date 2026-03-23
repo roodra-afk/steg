@@ -53,12 +53,10 @@ def encode(input_img_path, message, password, output_img_path, verbose=False):
     pixels = img.load()
     width, height = img.size
 
-    ecc_data = b"STEG" + bytes([parity]) + rs.encode(message.encode())
-
-    # --- STEP 2: ECC + ENCRYPTION ---
     parity = random.randint(8, 16)
     rs = RSCodec(parity)
-    ecc_data = bytes([parity]) + rs.encode(message.encode())
+    
+    ecc_data = b"STEG" + bytes([parity]) + rs.encode(message.encode())
 
     encrypted_blob = encrypt_data(ecc_data, password)
 
@@ -145,67 +143,45 @@ def decode(img_path, password, verbose=False):
     
     # --- PHASE 1: Extract 64-bit Obfuscated Header ---
     all_extracted_bits = []
-    bit_limit = 64
-    bit_idx = 0
+    coord_iter = iter(coords)
     
     if verbose:
-        print("[*] Scanning image for encrypted headers...")
-
-    for x, y in coords:
+        print("[*] Extracting all bits in one pass...")
+    
+    # Read ALL bits (header + payload)
+    for x, y in coord_iter:
         r, g, b = pixels[x, y]
         channels = [r, g, b]
-        
-        # Deterministic channel shuffle (LOCAL RNG)
+    
         channel_order = [0, 1, 2]
         rng = random.Random(seed + x + y)
         rng.shuffle(channel_order)
-
+    
         for i in channel_order:
-            if bit_idx < bit_limit:
-                all_extracted_bits.append(channels[i] & 1)
-                bit_idx += 1
-        if bit_idx >= bit_limit:
-            break
-
-    # --- Decode masked header ---
+            all_extracted_bits.append(channels[i] & 1)
+    
+    # --- Now process header ---
     mask = int("".join(map(str, all_extracted_bits[:32])), 2)
     masked_len = int("".join(map(str, all_extracted_bits[32:64])), 2)
     blob_len = mask ^ masked_len
-
-    if verbose:
-        print(f"[*] Found Payload: {blob_len} bytes. Commencing extraction...")
-
-    # --- PHASE 2: Extract Encrypted ECC Blob ---
-    bit_limit = 64 + (blob_len * 8)
-    # keep existing bits, DO NOT reset
     
-    for x, y in coords:
-        r, g, b = pixels[x, y]
-        channels = [r, g, b]
-        
-        # Same deterministic shuffle
-        channel_order = [0, 1, 2]
-        pixel_hash = hashes.Hash(hashes.SHA256())
-        pixel_hash.update(f"{seed}-{x}-{y}".encode())
-        pixel_seed = int.from_bytes(pixel_hash.finalize(), 'big')
-        
-        rng = random.Random(pixel_seed)
-        rng.shuffle(channel_order)
-
-        for i in channel_order:
-            if bit_idx < bit_limit:
-                all_extracted_bits.append(channels[i] & 1)
-                bit_idx += 1
-        if bit_idx >= bit_limit:
-            break
-
-    # --- Convert bits to bytes ---
+    if verbose:
+        print(f"[*] Found Payload: {blob_len} bytes")
+    
+    # --- Extract only required payload bits ---
+    start = 64
+    end = 64 + (blob_len * 8)
+    payload_bits = all_extracted_bits[start:end]
+    
+    # Convert bits to bytes
     blob_bytes = bytearray()
-    for i in range(64, len(all_extracted_bits), 8):
-        byte = int("".join(map(str, all_extracted_bits[i:i+8])), 2)
+    for i in range(0, len(payload_bits), 8):
+        byte = int("".join(map(str, payload_bits[i:i+8])), 2)
         blob_bytes.append(byte)
     
     # --- Decrypt and return ---
+    print(f"[DEBUG] Extracted bytes: {len(blob_bytes)}")
+    print(f"[DEBUG] Expected bytes: {blob_len}")
     return decrypt_data(bytes(blob_bytes), password)
 
 def main():
@@ -259,38 +235,40 @@ def main():
             print(f"Success! '{args.output}' now contains your secret.")
     
     elif args.mode == "decode":
+        if not os.path.exists(args.image):
+            print(f"Error: {args.image} not found.")
+            return
+    
+        try:
+            # 1. Decrypt the raw blob
+            decrypted_ecc_data = decode(args.image, args.password, verbose=args.verbose)
+    
+            # 2. Validate header
             if not decrypted_ecc_data.startswith(b"STEG"):
                 raise ValueError("Invalid password or corrupted data")
-            
+    
+            # 3. Extract parity and decode
             parity = decrypted_ecc_data[4]
             rs = RSCodec(parity)
-            
+    
             decoded_msg, _, errata_pos = rs.decode(decrypted_ecc_data[5:])
-                    
-            try:
-                # 1. Decrypt the raw blob
-                decrypted_ecc_data = decode(args.image, args.password, verbose=args.verbose)
-                
-                parity = decrypted_ecc_data[0]
-                rs = RSCodec(parity)
-                
-                decoded_msg, _, errata_pos = rs.decode(decrypted_ecc_data[1:])
-                if errata_pos:
-                    raise ValueError("Data corruption detected")
-                
-                final_message = decoded_msg.decode()
-                
-                print(f"\n[+] DECODED MESSAGE: {final_message}")
-                
-            except Exception:
-                # THE LOGIC BOMB: Show fake data on failure
-                fake_results = [
-                    "nice try, bitchh!.",
-                    "Target: 192.168.1.108 | Status: Vulnerable",
-                    "ERR_INTEGRITY_FAILURE: Auth Token Revoked",
-                    "System Hash: 8b2f9a... [Encrypted]"
-                ]
-                print(f"\n[+] DECODED MESSAGE: {random.choice(fake_results)}")
+    
+            if errata_pos:
+                raise ValueError("Data corruption detected")
+    
+            final_message = decoded_msg.decode()
+    
+            print(f"\n[+] DECODED MESSAGE: {final_message}")
+    
+        except Exception:
+            # THE LOGIC BOMB: Show fake data on failure
+            fake_results = [
+                "nice try, bitchh!.",
+                "Target: 192.168.1.108 | Status: Vulnerable",
+                "ERR_INTEGRITY_FAILURE: Auth Token Revoked",
+                "System Hash: 8b2f9a... [Encrypted]"
+            ]
+            print(f"\n[+] DECODED MESSAGE: {random.choice(fake_results)}")
             
 if __name__ == "__main__":
     main()
