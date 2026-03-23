@@ -52,6 +52,8 @@ The encrypted data is embedded using a **password-seeded pseudo-random process**
 1. The password is hashed to generate a deterministic seed
 2. Pixel coordinates are shuffled based on that seed
 3. Data bits are scattered across the image in a non-linear pattern
+4. LSB Matching (Stealth Boost): Unlike standard LSB flipping, this tool uses LSB Matching. If the bit doesn't match, it randomly adds or subtracts 1 from the pixel value. This prevents the "Pairs of Values" (PoV) statistical signature that most steganography detectors look for.  
+
 
 This ensures the embedded data resembles natural noise and avoids detectable patterns.
 
@@ -146,21 +148,11 @@ If density exceeds safe thresholds, the tool warns about potential detectability
 
 # Installation
 
-## 1. Clone the repository
+No cloning required:
+
+```bash
+pip install stegx
 ```
-git clone https://github.com/roodra-afk/steg
-
-cd steg
-```
-
-
----
-
-## 2. Install dependencies
-```
-pip install -r requirements.txt
-```
-
 ---
 
 # Usage
