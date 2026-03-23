@@ -13,10 +13,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-# --- CROSS-PLATFORM CONSOLE INIT ---
 console = Console(force_terminal=True) if os.name == 'nt' else Console()
 
-# --- BRANDING ---
 def brand():
     banner = """
 [bold red]
@@ -31,7 +29,6 @@ def brand():
     """
     console.print(Panel.fit(banner, border_style="bright_blue", subtitle="[bold white]roodra-afk[/bold white]"))
 
-# --- ENCRYPTION HELPERS ---
 def derive_key(password: str, salt: bytes):
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=600000)
     return kdf.derive(password.encode())
@@ -58,7 +55,6 @@ def get_shuffled_coords(width, height, password, verbose=False):
         console.print(f"[blue][*][/blue] Entropy: Shuffled {width*height} pixels with seed {seed % 10000}")
     return coords, seed
 
-# --- STEGANOGRAPHY CORE ---
 def encode(input_img_path, message, password, output_img_path, verbose=False):
     if not input_img_path.lower().endswith(".png"):
         console.print("[bold red][!] Error: Only PNG is supported to prevent data loss.[/bold red]")
@@ -150,7 +146,6 @@ def decode(img_path, password, verbose=False):
     return decrypt_data(bytes(blob_bytes), password)
 
 def main():
-    # Force the banner to show even for --help or no arguments
     brand()
 
     parser = argparse.ArgumentParser(
