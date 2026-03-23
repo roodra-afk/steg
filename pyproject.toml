@@ -1,20 +1,24 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
 
 [project]
 name = "stegx"
-version = "0.1.1"
-description = "Professional Steganography tool with AES-GCM and Reed-Solomon ECC"
-authors = [{ name = "roodra-afk" }]
+version = "0.1.2"
+description = "stegx: Advanced Cross-Platform Steganography Suite"
 readme = "README.md"
-dependencies = [
-    "pillow",
-    "numpy",
-    "reedsolo",
-    "cryptography"
-]
 requires-python = ">=3.8"
+authors = [{name = "roodra-afk"}]
+dependencies = [
+    "Pillow>=10.0.0",
+    "cryptography>=41.0.0",
+    "reedsolo>=1.7.0",
+    "rich>=13.0.0",
+    "numpy>=1.20.0"
+]
 
 [project.scripts]
 stegx = "stegx.cli:main"
+
+[tool.flit.module]
+name = "stegx"
