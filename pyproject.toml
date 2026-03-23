@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stegx"
+version = "0.1.0"
+description = "Professional Steganography tool with AES-GCM and Reed-Solomon ECC"
+authors = [{ name = "roodra-afk" }]
+readme = "README.md"
+dependencies = [
+    "pillow",
+    "numpy",
+    "reedsolo",
+    "cryptography"
+]
+requires-python = ">=3.8"
+
+[project.scripts]
+stegx = "stegx.cli:main"
