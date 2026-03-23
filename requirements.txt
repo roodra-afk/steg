@@ -1,4 +1,0 @@
-cryptography==46.0.5
-Pillow==12.1.1
-reedsolo
-numpy
