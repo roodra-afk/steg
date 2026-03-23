@@ -1,4 +1,4 @@
-# steg
+# stegx
 
 # Advanced Image Steganography Tool
 
@@ -71,7 +71,14 @@ This implementation:
 
 ---
 
-## 3. Coordinate Generation
+### Integrity & Error Correction (Reed-Solomon)
+
+The tool implements Reed-Solomon Error Correction (ECC). This allows the hidden message to remain recoverable even if the stego-image suffers minor bit-level corruption or noise.
+
+---
+
+
+## 4. Coordinate Generation
 
 The embedding path is determined by:
 ```
@@ -163,14 +170,14 @@ Run the tool via command-line arguments:
 
 ### Encode a Message
 ```
-python3 steg.py encode -i input.png -m "Secret message" -p "password" -o output.png
+stegx encode -i input.png -m "Secret message" -p "password" -o output.png
 ```
 
 ---
 
 ### Decode a Message
 ```
-python3 steg.py decode -i output.png -p "password"
+stegx decode -i output.png -p "password"
 ```
 
 ---
@@ -179,18 +186,19 @@ python3 steg.py decode -i output.png -p "password"
 
 ### Encode:
 ```
-python3 steg.py encode -i photo.png -m "This is classified" -p "myStrongPassword" -o hidden.png
+stegx encode -i photo.png -m "This is classified" -p "myStrongPassword" -o hidden.png
 ```
 
 ### Decode:
 ```
-python3 steg.py decode -i hidden.png -p "myStrongPassword"
+stegx decode -i hidden.png -p "myStrongPassword"
 ```
 
 ---
 
 # Security Features
 
+* Logic Bomb: Returns fake "honey-pot" data on failed decryption to mislead forensic analysis.
 * AES-256-GCM authenticated encryption
 * PBKDF2 key derivation with 600,000 iterations
 * Reed-Solomon error correction
